@@ -61,7 +61,8 @@ type consumerConfig struct {
 
 	// concurrency is the maximum number of handler goroutines that may
 	// run in parallel. Defaults to 1 (serial, in-order processing).
-	concurrency int
+	concurrency  int
+	subscriberID string
 }
 
 func defaultConsumerConfig() consumerConfig {
@@ -89,13 +90,21 @@ func WithConcurrency(n int) ConsumerOption {
 	}
 }
 
-// NewConsumer opens a subscribe stream against the current cluster
+// WithSubscriberID selects a stable universal subscription when group is empty.
+// The same ID must be reused after reconnect or process restart.
+func WithSubscriberID(id string) ConsumerOption {
+	return func(c *consumerConfig) { c.subscriberID = id }
+}
+
+// NewConsumer binds an existing durable subscription against the current cluster
 // leader for (topic, group) and returns a ready [Consumer].
 //
 // Consumers sharing the same group compete for messages (one delivery
 // per group); different groups on the same topic each receive an
 // independent copy (fan-out).
 //
+// Create the interest with Client.Subscribe first. Closing the Consumer only
+// disconnects its worker; call Client.Unsubscribe to remove durable interest.
 // The context controls the lifetime of the underlying stream.
 func (c *Client) NewConsumer(
 	ctx context.Context,
@@ -107,6 +116,9 @@ func (c *Client) NewConsumer(
 		opt(&cfg)
 	}
 
+	if err := validateSubscription(Subscription{Topic: topic, Group: group, SubscriberID: cfg.subscriberID}); err != nil {
+		return nil, err
+	}
 	streamCtx, cancel := context.WithCancel(ctx)
 	consumer := &Consumer{
 		client: c,
@@ -153,8 +165,9 @@ func (c *Consumer) reconnect(ctx context.Context) error {
 	init := &pb.ConsumerFrame{
 		Body: &pb.ConsumerFrame_Init{
 			Init: &pb.SubscribeInit{
-				Topic:   c.topic,
-				GroupId: c.group,
+				Topic:        c.topic,
+				GroupId:      c.group,
+				SubscriberId: c.cfg.subscriberID,
 			},
 		},
 	}
@@ -162,6 +175,23 @@ func (c *Consumer) reconnect(ctx context.Context) error {
 		_ = stream.CloseSend()
 		conn.Close()
 		return fmt.Errorf("futureq: send subscribe init: %w", err)
+	}
+
+	// Wait until the broker confirms that this stream bound to an existing
+	// subscription. Missing/deleted subscriptions must fail at construction.
+	headers, bindErr := stream.Header()
+	if bindErr == nil && len(headers.Get("subscription-generation")) == 0 {
+		// A trailers-only rejection can return empty headers without an error.
+		// Receive its terminal status rather than reporting a successful binding.
+		_, bindErr = stream.Recv()
+		if bindErr == nil {
+			bindErr = fmt.Errorf("server did not confirm subscription binding")
+		}
+	}
+	if bindErr != nil {
+		_ = stream.CloseSend()
+		_ = conn.Close()
+		return fmt.Errorf("futureq: bind subscription: %w", bindErr)
 	}
 
 	c.conn = conn

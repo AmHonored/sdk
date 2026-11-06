@@ -41,6 +41,9 @@
 //
 // # Producing
 //
+//	_, err := client.Subscribe(ctx, futureq.Subscription{Topic: "email", Group: "workers"})
+//	if err != nil { log.Fatal(err) }
+//
 //	producer, err := client.NewProducer(ctx)
 //	if err != nil { log.Fatal(err) }
 //	defer producer.Close()

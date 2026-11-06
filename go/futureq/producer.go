@@ -138,9 +138,11 @@ func (p *Producer) Publish(ctx context.Context, msg Message) error {
 //
 // ackLevel selects the durability guarantee:
 //   - [AckQuorum] — the broker waits until the batch is replicated to a
-//     quorum of Raft voters before acknowledging. Safest; default.
-//   - [AckNone] — the broker acknowledges immediately. Fastest; messages
-//     may be lost if the leader crashes before replicating.
+//     quorum of voters and admitted during apply. Safest; default.
+//   - [AckLeader] — the broker waits for local log persistence with frozen
+//     destinations. Failover may lose an uncommitted batch.
+//   - [AckNone] — the broker confirms submission with preselected destinations,
+//     without waiting for persistence or replication.
 //
 // Possible errors:
 //   - [ErrClosed] — the Producer has been closed.

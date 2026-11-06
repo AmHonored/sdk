@@ -1,17 +1,14 @@
 module github.com/futureq-io/sdk/go
 
-go 1.26.5
+go 1.27.1
 
 require (
 	github.com/futureq-io/futureq v0.0.0
-	github.com/futureq-io/protocol/proto/go v0.2.0
+	github.com/futureq-io/protocol/proto/go v0.4.0
 	github.com/lni/dragonboat/v4 v4.0.0-20250723143628-076c7f6497dc
-	google.golang.org/grpc v1.82.1
-)
-
-require (
 	github.com/lni/vfs v0.2.1-0.20220616104132-8852fd867376
 	go.uber.org/zap v1.28.0
+	google.golang.org/grpc v1.85.0
 )
 
 require (
@@ -36,7 +33,7 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.1 // indirect
 	github.com/hashicorp/memberlist v0.3.1 // indirect
-	github.com/klauspost/compress v1.17.11 // indirect
+	github.com/klauspost/compress v1.20.1 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lni/goutils v1.4.0 // indirect
@@ -48,11 +45,11 @@ require (
 	github.com/valyala/fastrand v1.1.0 // indirect
 	github.com/valyala/histogram v1.2.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
 	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df // indirect
-	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260729162451-8efbd57d26e0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )

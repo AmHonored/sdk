@@ -22,6 +22,11 @@ func Example() {
 
 	ctx := context.Background()
 
+	_, err = client.Subscribe(ctx, futureq.Subscription{Topic: "email", Group: "senders"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	producer, err := client.NewProducer(ctx)
 	if err != nil {
 		log.Fatal(err)

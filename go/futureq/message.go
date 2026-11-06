@@ -9,18 +9,21 @@ type AckLevel int
 
 const (
 	// AckQuorum requires the batch to be replicated to a quorum of Raft
-	// voters before the broker acknowledges it. This is the default and the
-	// safest option.
+	// voters and successfully admitted during apply before acknowledgment.
+	// Destinations are selected in Raft order without an admission read.
+	// This is the default and safest option.
 	AckQuorum AckLevel = iota
 
 	// AckLeader asks the broker to acknowledge the batch as soon as the
 	// Raft leader has durably written it to its own log, without waiting
 	// for replication to a quorum. A leader failover after the ack may
-	// still lose the batch. Stronger than AckNone, weaker than AckQuorum.
+	// still lose the batch. Destinations are frozen before proposal.
+	// Stronger than AckNone, weaker than AckQuorum.
 	AckLeader
 
 	// AckNone asks the broker to acknowledge the batch immediately, without
-	// waiting for replication. Use this only when losing messages is
+	// waiting for persistence or replication. Destinations are preselected,
+	// but success confirms submission only. Use this when losing messages is
 	// acceptable (e.g. high-throughput telemetry).
 	AckNone
 )
@@ -56,8 +59,7 @@ func StringIndex(v string) Index {
 // Message is the value type passed to [Producer.Publish] and
 // [Producer.PublishBatch].
 //
-// Every field has an idiomatic zero value:
-//   - Topic may be empty (the server accepts it).
+// Topic must be nonempty. The other fields have useful zero values:
 //   - Payload may be nil (a zero-byte body is stored).
 //   - Delay and TTL of zero mean "deliver on the next dispatcher tick" and
 //     "never expire" respectively.

@@ -23,7 +23,7 @@ Requires Go 1.26 or later.
 - **Topology-aware routing** — the SDK tracks the cluster's Raft leader and automatically routes producer / consumer streams to it. On a leader change, streams are torn down and re-established against the new leader without application involvement.
 - **Two discovery modes** — lightweight polling via `GetClusterInfo` (default), or an experimental embedded Dragonboat observer that receives push-based topology updates over Raft.
 - **Atomic batch publishing** — every batch is committed as a single Raft log entry. Either the whole batch lands or none of it does.
-- **Per-batch durability control** — choose between quorum-acknowledged (`AckQuorum`) and fire-and-forget (`AckNone`) per batch.
+- **Per-batch durability control** — choose quorum (`AckQuorum`), leader persistence (`AckLeader`), or submission only (`AckNone`) per batch.
 - **Delayed delivery, TTLs, secondary indexes** — schedule messages for future delivery, expire them automatically, and attach queryable indexes.
 - **Consumer groups** — competing-consumer semantics within a group, fan-out across groups.
 - **Safe concurrency** — `Client` and `Producer` are safe for use from multiple goroutines. `Consumer.Subscribe` supports configurable handler parallelism.
@@ -54,6 +54,10 @@ func main() {
     defer client.Close()
 
     ctx := context.Background()
+
+    // Declare interest before publishing, even if no workers are connected.
+    _, err = client.Subscribe(ctx, futureq.Subscription{Topic: "email", Group: "senders"})
+    if err != nil { log.Fatal(err) }
 
     // ── Produce ────────────────────────────────────────────────────────
     producer, err := client.NewProducer(ctx)
@@ -231,8 +235,16 @@ A batch is written as a **single Raft log entry** — atomic, all-or-nothing.
 
 | `AckLevel`  | Behaviour                                                                       |
 | ----------- | ------------------------------------------------------------------------------- |
-| `AckQuorum` | Broker waits for the batch to be replicated to a quorum of voters before acking. **Default.** |
-| `AckNone`   | Broker acks immediately. Highest throughput; messages may be lost on leader crash. |
+| `AckQuorum` | Broker waits for quorum commit and successful admission during Raft apply. **Default.** |
+| `AckLeader` | Broker waits for local leader-log persistence with frozen destinations. Failover can lose an uncommitted batch. |
+| `AckNone`   | Broker confirms submission with preselected destinations; persistence and delivery are not confirmed. |
+
+Quorum publishes select durable subscriptions in Raft order without a separate
+admission read. The early ACK modes refresh the registry and freeze destinations
+before proposal. Offline subscriptions retain their obligations in every mode
+once the publish commits, until ACK, unsubscribe, expiry, or deletion. Use
+`AckQuorum` for producer-confirmed delivery across leader failure. Standalone
+publishes store payload and destinations in one synchronous batch.
 
 #### Retries
 
@@ -247,9 +259,39 @@ err := producer.PublishBatchWithRetry(ctx, msgs, futureq.AckQuorum, policy)
 
 ---
 
+### Durable subscriptions
+
+Declare interest separately from worker connections. Both groups and universal
+subscribers retain messages while disconnected, subject to message TTL and the
+broker's `delivery.subscriptions.disconnectTimeout` (`0s` means forever).
+
+```go
+// Competing workers share this subscription.
+workers := futureq.Subscription{Topic: "email", Group: "senders"}
+_, err := client.Subscribe(ctx, workers)
+
+// An independent universal subscriber needs a stable ID across restarts.
+audit := futureq.Subscription{Topic: "email", SubscriberID: "audit-service"}
+_, err = client.Subscribe(ctx, audit)
+auditConsumer, err := client.NewConsumer(ctx, "email", "",
+    futureq.WithSubscriberID("audit-service"))
+
+// Close only disconnects a worker; it does not remove durable interest.
+_ = auditConsumer.Close()
+
+// Explicitly remove interest and discard only its pending deliveries.
+err = client.Unsubscribe(ctx, audit)
+```
+
+Unsubscribe cleanup is asynchronous; already in-flight deliveries can overlap
+removal. Recreating the same name creates a fresh generation without old backlog.
+A connection cannot create or recreate a subscription.
+
 ### Consuming
 
 ```go
+_, err := client.Subscribe(ctx, futureq.Subscription{Topic: "email", Group: "senders"})
+if err != nil { log.Fatal(err) }
 consumer, err := client.NewConsumer(ctx,
     "email",   // topic
     "senders", // consumer group
@@ -269,7 +311,7 @@ err = consumer.Subscribe(ctx, func(d futureq.Delivery) error {
 
 #### Groups
 
-- Consumers **in the same group** compete for messages — each message is delivered to exactly one member.
+- Consumers **in the same group** compete for messages. Delivery is at least once, so processing can be repeated after failures.
 - Consumers **in different groups** on the same topic each receive an independent copy (fan-out).
 
 #### Delivery
@@ -345,6 +387,7 @@ fmt.Println("current leader:", client.Leader())
 client, _ := futureq.New(seeds, …)
 
 producer, _ := client.NewProducer(ctx)
+_, _ = client.Subscribe(ctx, futureq.Subscription{Topic: "topic", Group: "group"})
 consumer, _ := client.NewConsumer(ctx, "topic", "group")
 
 // On shutdown:
