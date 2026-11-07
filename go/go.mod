@@ -2,9 +2,13 @@ module github.com/futureq-io/sdk/go
 
 go 1.27.1
 
+// Protocol PR: https://github.com/futureq-io/protocol/pull/2
+// Replace with an upstream release after the protocol change is merged.
+replace github.com/futureq-io/protocol/proto/go => github.com/AmHonored/protocol/proto/go v0.0.0-20261107075654-d8c6174a041b
+
 require (
 	github.com/futureq-io/futureq v0.0.0
-	github.com/futureq-io/protocol/proto/go v0.4.1-0.20261107081013-2bd04c575642
+	github.com/futureq-io/protocol/proto/go v0.4.0
 	github.com/lni/dragonboat/v4 v4.0.0-20250723143628-076c7f6497dc
 	github.com/lni/vfs v0.2.1-0.20220616104132-8852fd867376
 	go.uber.org/zap v1.28.0
